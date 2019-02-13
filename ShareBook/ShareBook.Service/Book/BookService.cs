@@ -4,6 +4,7 @@ using ShareBook.Domain;
 using ShareBook.Domain.Common;
 using ShareBook.Domain.Enums;
 using ShareBook.Domain.Exceptions;
+using ShareBook.Helper;
 using ShareBook.Helper.Extensions;
 using ShareBook.Helper.Image;
 using ShareBook.Repository;
@@ -212,6 +213,11 @@ namespace ShareBook.Service
             return SearchBooks(filter, page, itemsPerPage);
         }
 
+        public PagedList<Book> ByCategoryId(Guid categoryId, int page, int itemsPerPage)
+            => SearchBooks(x => (x.Approved
+                                && !x.BookUsers.Any(y => y.Status == DonationStatus.Donated))
+                                && x.CategoryId == categoryId, page, itemsPerPage);
+
         public Book BySlug(string slug)
         {
             var pagedBook = SearchBooks(x => (x.Slug.Equals(slug)), 1, 1);
@@ -285,7 +291,8 @@ namespace ShareBook.Service
             if (book == null)
                 throw new ShareBookException(ShareBookException.Error.NotFound);
 
-            var date = DateTime.Now.ToString("dd/MM/yyyy");
+            var saoPauloNow = DateTimeHelper.ConvertDateTimeSaoPaulo(DateTime.Now);
+            var date = saoPauloNow.ToString("dd/MM/yyyy");
             var lineBreak = (string.IsNullOrEmpty(book.FacilitatorNotes)) ? "" : "\n";
             book.FacilitatorNotes += string.Format("{0}{1} - {2}", lineBreak, date, facilitatorNotes);
 
@@ -301,6 +308,15 @@ namespace ShareBook.Service
             .ToList();
 
             return books.FirstOrDefault();
+        }
+
+        public void RenewChooseDate(Guid bookId) {
+            var book = _repository.Find(bookId);
+            if (book == null)
+                throw new ShareBookException(ShareBookException.Error.NotFound);
+
+            book.ChooseDate = DateTime.Now.AddDays(10);
+            _repository.Update(book);
         }
 
         #region Private
@@ -340,10 +356,8 @@ namespace ShareBook.Service
                             CreationDate = u.User.Address.CreationDate,
                         }
                     },
-                    Category = new Category()
-                    {
-                        Name = u.Category.Name
-                    }
+                    CategoryId = u.CategoryId,
+                    Category = u.Category
                 });
 
             return FormatPagedList(result, page, itemsPerPage, result.Count());
